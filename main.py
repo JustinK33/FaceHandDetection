@@ -4,7 +4,7 @@ import time
 
 cap = cv2.VideoCapture(0) # 0 means default webcam
 success, frame = cap.read() # reads one frame
-last_box = None
+last_boxes = []
 latest_hand_result = None
 
 if not success:
@@ -32,6 +32,7 @@ def print_result(result, output_image: mp.Image, timestamp_ms: int):
 options = HandLandmarkerOptions(
     base_options=BaseOptions(model_asset_path='hand_landmarker.task'),
     running_mode=VisionRunningMode.LIVE_STREAM,
+    num_hands=4,
     result_callback=print_result)
 with HandLandmarker.create_from_options(options) as landmarker: # initalizes the landmarker
 
@@ -56,14 +57,15 @@ with HandLandmarker.create_from_options(options) as landmarker: # initalizes the
         _, faces = detector.detect(frame) # runs detection
         # faces is a array of numbers
         # the first 4 values being x, y, w, h
-        # print(faces)
+
+        last_boxes = []
 
         if faces is not None:
-            x, y, w, h = faces[0][:4].astype(int)
-            last_box = (x, y, w, h)
+            for face in faces:
+                x, y, w, h = face[:4].astype(int)
+                last_boxes.append((x, y, w, h))
 
-        if last_box is not None:
-            x, y, w, h = last_box
+        for x, y, w, h in last_boxes:
             cv2.rectangle(frame, (x, y), (x + w, y + h), (255, 0, 0), 2)
 
         # convert the frame from OpenCV into mediapipes image object
@@ -75,30 +77,29 @@ with HandLandmarker.create_from_options(options) as landmarker: # initalizes the
 
         if latest_hand_result is not None:
             if latest_hand_result.hand_landmarks:
-                # stores only the normalizedlandmarks
-                first_hand = latest_hand_result.hand_landmarks[0]
-                # stores the first normalizedlandmark
-                for r in first_hand: # type: ignore becausae its gonna be unbound depending on how long i keep the camera on
-                    pixel_x = int(r.x * frame_w)
-                    pixel_y = int(r.y * frame_h)          
+                for hand_landmarks in latest_hand_result.hand_landmarks: # type: ignore
+                    # stores the first normalizedlandmark
+                    for r in hand_landmarks: # type: ignore becausae its gonna be unbound depending on how long i keep the camera on
+                        pixel_x = int(r.x * frame_w)
+                        pixel_y = int(r.y * frame_h)          
 
-                    cv2.circle(frame, (pixel_x, pixel_y), 2, (255, 0, 0), 2)
+                        cv2.circle(frame, (pixel_x, pixel_y), 2, (255, 0, 0), 2)
 
-                hand_connections = mp.tasks.vision.HandLandmarksConnections.HAND_CONNECTIONS
+                    hand_connections = mp.tasks.vision.HandLandmarksConnections.HAND_CONNECTIONS
 
-                for connection in hand_connections:
-                    start_idx = connection.start
-                    end_idx = connection.end
-                    
-                    start_landmark = first_hand[start_idx]
-                    end_landmark = first_hand[end_idx]
+                    for connection in hand_connections:
+                        start_idx = connection.start
+                        end_idx = connection.end
+                        
+                        start_landmark = hand_landmarks[start_idx]
+                        end_landmark = hand_landmarks[end_idx]
 
-                    start_x = int(start_landmark.x * frame_w)
-                    start_y = int(start_landmark.y * frame_h)
-                    end_x = int(end_landmark.x * frame_w)
-                    end_y = int(end_landmark.y * frame_h)
+                        start_x = int(start_landmark.x * frame_w)
+                        start_y = int(start_landmark.y * frame_h)
+                        end_x = int(end_landmark.x * frame_w)
+                        end_y = int(end_landmark.y * frame_h)
 
-                    cv2.line(frame, (start_x, start_y), (end_x, end_y), (0, 255, 0), 2)
+                        cv2.line(frame, (start_x, start_y), (end_x, end_y), (0, 255, 0), 2)
 
         # frame is the actual frame
         cv2.imshow("Webcam", frame)
